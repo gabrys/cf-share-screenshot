@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cf-share-screenshot"
+dynamic = ["version"]
+description = "Share a GNOME/Wayland screenshot through a Cloudflare quick tunnel and copy its URL."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = []
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Multimedia :: Graphics :: Capture :: Screen Capture",
+    "Topic :: Utilities",
+]
+
+[project.urls]
+Repository = "https://github.com/gabrys/cf-share-screenshot"
+Issues = "https://github.com/gabrys/cf-share-screenshot/issues"
+
+[project.scripts]
+cf-share-screenshot = "cf_share_screenshot:main"
+
+[tool.setuptools]
+py-modules = ["cf_share_screenshot"]
+
+[tool.setuptools.dynamic]
+version = { attr = "cf_share_screenshot.__version__" }
