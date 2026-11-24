@@ -5,7 +5,7 @@ Cloudflare quick tunnel, and copy that URL to the clipboard. Useful for pasting
 a screenshot link into a chat with an AI agent or a colleague.
 
 The clipboard receives
-`screenshot at https://….trycloudflare.com/img/<id>.png (try again in a few seconds if this URL doesn't work)`.
+`[Screenshot](https://….trycloudflare.com/img/<id>.png) (try again in a few seconds if this URL doesn't work)`.
 
 ## Requirements
 
@@ -77,7 +77,7 @@ uvx twine check --strict dist/*
 ## Publishing
 
 The version lives in `__version__` in `cf_share_screenshot.py` (currently
-`0.1.1`). Build from a clean checkout using the commands above, ensuring `dist/`
+`0.1.2`). Build from a clean checkout using the commands above, ensuring `dist/`
 contains only the current release. Upload to TestPyPI:
 
 ```sh
@@ -87,7 +87,7 @@ uvx twine upload --repository testpypi dist/*
 Verify the TestPyPI release in an isolated environment:
 
 ```sh
-uvx --isolated --index https://test.pypi.org/simple/ --default-index https://pypi.org/simple/ cf-share-screenshot@0.1.1 --help
+uvx --isolated --index https://test.pypi.org/simple/ --default-index https://pypi.org/simple/ cf-share-screenshot@0.1.2 --help
 ```
 
 Then upload the same artifacts to PyPI:

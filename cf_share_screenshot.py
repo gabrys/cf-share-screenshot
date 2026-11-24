@@ -27,7 +27,7 @@ from urllib.parse import urlsplit
 import urllib.error
 import urllib.request
 
-__version__ = '0.1.1'
+__version__ = '0.1.2'
 
 PORT = 18765
 HOST = '127.0.0.1'
@@ -141,7 +141,7 @@ def ensure_server():
     if alive():
         return False
     ensure_token()
-    say('Starting the server and the Cloudflare tunnel…', file=sys.stderr, notify=True)
+    say('Starting the Cloudflare tunnel for screenshot sharing', file=sys.stderr, notify=True)
     # The server reports problems through notifications, not a log file.
     subprocess.Popen([sys.executable, str(Path(__file__).resolve()),
                       '--internal-cmd', 'serve'],
@@ -181,7 +181,7 @@ def share_screenshot():
     ensure_server()
     # The server holds this request until cloudflared reports its URL (up to TUNNEL_TIMEOUT).
     result = control('POST', '/img', data, timeout=TUNNEL_TIMEOUT + 5)
-    say(f"screenshot at {result['url']} (try again in a few seconds if this URL doesn't work)",
+    say(f"[Screenshot]({result['url']}) (try again in a few seconds if this URL doesn't work)",
         notify=True, clipboard=True)
 
 
