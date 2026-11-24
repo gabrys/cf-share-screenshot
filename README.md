@@ -4,7 +4,8 @@ Select an area of the screen, upload it to a temporary public URL through a
 Cloudflare quick tunnel, and copy that URL to the clipboard. Useful for pasting
 a screenshot link into a chat with an AI agent or a colleague.
 
-The clipboard receives `screenshot at https://….trycloudflare.com/image/<id>.png`.
+The clipboard receives
+`screenshot at https://….trycloudflare.com/image/<id>.png (try again in a few seconds if this URL doesn't work)`.
 
 ## Requirements
 
@@ -14,9 +15,11 @@ these executables on your `PATH`:
 - [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
 - `gnome-screenshot`
 - `wl-copy` (from `wl-clipboard`)
-- `notify-send` (optional, from `libnotify`) for desktop notifications
+- `notify-send` (from `libnotify`) for desktop notifications
 
-Installing this package does not install any of them. On Debian or Ubuntu:
+All four are checked at startup, before the area selection, and every missing
+one is reported in a single error. Installing this package does not install
+any of them. On Debian or Ubuntu:
 
 ```sh
 sudo apt install gnome-screenshot wl-clipboard libnotify-bin
@@ -57,23 +60,27 @@ The first screenshot starts a background server on `127.0.0.1:18765` and a
 `cloudflared` quick tunnel to it. Later screenshots reuse both, so the public
 host name stays the same while the server runs.
 
-- Each screenshot is kept in memory for 30 minutes under a random 128-bit ID.
+- The screenshot is uploaded as soon as the local server answers. On the first
+  start the server holds the upload until `cloudflared` reports its URL (up to
+  20 seconds) and returns it right away, without checking it. A brand-new
+  host name may need a few more seconds before it resolves.
+- Each screenshot is kept in memory for 30 minutes under a random 64-bit ID.
 - The server checks its public URL about every minute and restarts the tunnel
   if it stops responding; the host name then changes.
 - After 3 hours without uploads the server and the tunnel shut down.
 - Cancelling the area selection does not start the server.
+- The bound port is the server's lock: a second server exits silently.
 
-Runtime files (bearer token, lock files, `server.log`) live in
-`$XDG_RUNTIME_DIR/cf-share-screenshot/` with mode `0700`. Check `server.log`
-when something goes wrong.
+The background server writes no log; it reports tunnel restarts, failures and
+its shutdown through desktop notifications. The bearer token lives in
+`$XDG_RUNTIME_DIR/cf-share-screenshot/` with mode `0700`.
 
 ## Security
 
 Anyone who knows an image URL can download that image until it expires. The IDs
 are random and are not listed anywhere, but treat the URL as a secret and don't
 share screenshots with sensitive content. Uploads and `/status` require a bearer
-token that only the local user can read. The server never logs image IDs or
-tokens. The tunnel depends on Cloudflare's free quick tunnel service, which has
+token that only the local user can read. The tunnel depends on Cloudflare's free quick tunnel service, which has
 no uptime guarantee.
 
 ## Development

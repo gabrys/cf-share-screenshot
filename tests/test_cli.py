@@ -43,7 +43,20 @@ class CommandTests(unittest.TestCase):
             env = dict(os.environ, PATH=empty)
             result = run_cli(env=env)
         self.assertEqual(result.returncode, 1)
-        self.assertIn('wl-copy not found', result.stderr)
+        self.assertIn('Missing commands: cloudflared, gnome-screenshot, wl-copy, notify-send.',
+                      result.stderr)
+
+    def test_reports_only_missing_tools(self):
+        with tempfile.TemporaryDirectory() as bin_dir:
+            for name in ('cloudflared', 'notify-send'):
+                tool = os.path.join(bin_dir, name)
+                with open(tool, 'w') as f:
+                    f.write('#!/bin/sh\nexit 0\n')
+                os.chmod(tool, 0o755)
+            env = dict(os.environ, PATH=bin_dir)
+            result = run_cli(env=env)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('Missing commands: gnome-screenshot, wl-copy.', result.stderr)
 
 
 class TunnelUrlTests(unittest.TestCase):
