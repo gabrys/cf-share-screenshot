@@ -32,7 +32,7 @@ __version__ = '0.1.0'
 PORT = 18765
 HOST = '127.0.0.1'
 TTL = 30 * 60
-IDLE = 3 * 60 * 60
+IDLE = 80 * 60
 CHECK_EVERY = 60
 MAX_IMAGE = 20 * 1024 * 1024
 SERVER_START_TIMEOUT = 5  # local HTTP server only; the tunnel may still be starting
@@ -42,8 +42,8 @@ TOKEN_FILE = APP_DIR / 'bearer.token'
 # Skip api.trycloudflare.com, which cloudflared mentions in its error messages.
 URL_RE = re.compile(r'https://(?!api\.)[a-z0-9-]+\.trycloudflare\.com', re.I)
 EDGE_HOST = 'api.trycloudflare.com'  # any stable host on Cloudflare's edge
-ID_BYTES = 8  # 64-bit random image IDs
-IMAGE_PATH_RE = re.compile(rf'/image/[a-f0-9]{{{ID_BYTES * 2}}}\.png')
+ID_BYTES = 5  # 40-bit random image IDs
+IMAGE_PATH_RE = re.compile(rf'/img/[a-f0-9]{{{ID_BYTES * 2}}}\.png')
 PNG_MAGIC = b'\x89PNG\r\n\x1a\n'
 REQUIRED_COMMANDS = ('cloudflared', 'gnome-screenshot', 'wl-copy', 'notify-send')
 
@@ -180,7 +180,7 @@ def share_screenshot():
     data = screenshot()
     ensure_server()
     # The server holds this request until cloudflared reports its URL (up to TUNNEL_TIMEOUT).
-    result = control('POST', '/image', data, timeout=TUNNEL_TIMEOUT + 5)
+    result = control('POST', '/img', data, timeout=TUNNEL_TIMEOUT + 5)
     say(f"screenshot at {result['url']} (try again in a few seconds if this URL doesn't work)",
         notify=True, clipboard=True)
 
@@ -275,7 +275,7 @@ class State:
         while not self.stop.is_set():
             self.cleanup()
             if time.monotonic() - self.last_upload >= IDLE:
-                say('No uploads for 3 hours; shutting down.', file=sys.stderr, notify=True)
+                say('No uploads for 80 minutes; shutting down.', file=sys.stderr, notify=True)
                 self.stop.set()
                 break
             if time.monotonic() >= next_check:
@@ -284,19 +284,16 @@ class State:
                     failures = 0
                 else:
                     failures += 1
-                    # If there is no URL or the process died, restart immediately.
-                    # Otherwise tolerate 2 transient failures before replacing the URL.
+                    # If there is no URL or the process died, shut down immediately.
+                    # Otherwise tolerate 2 transient failures before shutting down.
                     with self.lock:
                         missing = (not self.public_url or self.process is None
                                    or self.process.poll() is not None)
                     if missing or failures >= 3:
-                        say('Restarting the Cloudflare tunnel...', file=sys.stderr, notify=True)
-                        try:
-                            self.start_tunnel()
-                        except OSError as exc:
-                            say(f'Failed to start cloudflared: {exc}', file=sys.stderr,
-                                notify=True, clipboard=True)
-                        failures = 0
+                        say('Cloudflare tunnel is down; shutting down.',
+                            file=sys.stderr, notify=True)
+                        self.stop.set()
+                        break
             self.stop.wait(1)
 
 
@@ -328,7 +325,7 @@ def make_handler(state):
         def do_GET(self):
             path = urlsplit(self.path).path
             if IMAGE_PATH_RE.fullmatch(path):
-                ident = path[len('/image/'):]
+                ident = path[len('/img/'):]
                 with state.lock:
                     item = state.images.get(ident)
                     if item and item[1] > time.monotonic():
@@ -345,7 +342,7 @@ def make_handler(state):
             self.obj(404, {'error': 'Not found'})
 
         def do_POST(self):
-            if urlsplit(self.path).path != '/image':
+            if urlsplit(self.path).path != '/img':
                 self.obj(404, {'error': 'Not found'})
                 return
             if not self.authorized():
@@ -369,7 +366,7 @@ def make_handler(state):
                 ident = secrets.token_hex(ID_BYTES) + '.png'
                 state.images[ident] = (data, time.monotonic() + TTL)
                 state.last_upload = time.monotonic()
-                url = f'{state.public_url}/image/{ident}'
+                url = f'{state.public_url}/img/{ident}'
             self.obj(201, {'url': url})
 
         def log_message(self, fmt, *args):

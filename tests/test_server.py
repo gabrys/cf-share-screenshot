@@ -7,7 +7,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import cf_share_screenshot as app
 
@@ -70,32 +70,32 @@ class ServerTests(unittest.TestCase):
 
     def test_unknown_paths_and_images_are_404(self):
         self.assertEqual(self.request('GET', '/')[0], 404)
-        self.assertEqual(self.request('GET', f'/image/{secrets.token_hex(8)}.png')[0], 404)
+        self.assertEqual(self.request('GET', f'/img/{secrets.token_hex(5)}.png')[0], 404)
         self.assertEqual(self.request('POST', '/upload', PNG)[0], 404)
         # The client no longer chooses the image ID.
-        self.assertEqual(self.request('POST', f'/image/{secrets.token_hex(8)}.png', PNG)[0], 404)
+        self.assertEqual(self.request('POST', f'/img/{secrets.token_hex(5)}.png', PNG)[0], 404)
 
     def test_upload_requires_token_and_png(self):
         self.make_tunnel_ready()
-        self.assertEqual(self.request('POST', '/image', PNG, auth=False)[0], 401)
+        self.assertEqual(self.request('POST', '/img', PNG, auth=False)[0], 401)
         for body in (b'', b'GIF89a' + b'\0' * 32, PNG[:5]):
-            self.assertEqual(self.request('POST', '/image', body)[0], 400, body)
+            self.assertEqual(self.request('POST', '/img', body)[0], 400, body)
         self.assertEqual(self.state.images, {})
 
     def test_upload_and_download(self):
         self.forbid_http_check()
         self.make_tunnel_ready()
-        status, body = self.request('POST', '/image', PNG, headers={'Content-Type': 'image/png'})
+        status, body = self.request('POST', '/img', PNG, headers={'Content-Type': 'image/png'})
         self.assertEqual(status, 201)
         url = json.loads(body)['url']
-        self.assertRegex(url, r'^https://example\.trycloudflare\.com/image/[0-9a-f]{16}\.png$')
+        self.assertRegex(url, r'^https://example\.trycloudflare\.com/img/[0-9a-f]{10}\.png$')
         status, body = self.request('GET', url[len(PUBLIC_URL):], auth=False)
         self.assertEqual(status, 200)
         self.assertEqual(body, PNG)
 
     def test_each_upload_gets_a_new_id(self):
         self.make_tunnel_ready()
-        urls = {json.loads(self.request('POST', '/image', PNG)[1])['url'] for _ in range(3)}
+        urls = {json.loads(self.request('POST', '/img', PNG)[1])['url'] for _ in range(3)}
         self.assertEqual(len(urls), 3)
 
     def test_upload_sent_before_tunnel_is_ready_waits_for_it(self):
@@ -103,7 +103,7 @@ class ServerTests(unittest.TestCase):
         result = {}
 
         def upload():
-            result['response'] = self.request('POST', '/image', PNG)
+            result['response'] = self.request('POST', '/img', PNG)
 
         uploader = threading.Thread(target=upload)
         uploader.start()
@@ -114,23 +114,53 @@ class ServerTests(unittest.TestCase):
         uploader.join(timeout=10)
         status, body = result['response']
         self.assertEqual(status, 201)
-        self.assertTrue(json.loads(body)['url'].startswith(PUBLIC_URL + '/image/'))
+        self.assertTrue(json.loads(body)['url'].startswith(PUBLIC_URL + '/img/'))
 
     def test_upload_fails_when_tunnel_never_comes_up(self):
         with patch.object(app, 'TUNNEL_TIMEOUT', 0.5):
-            status, body = self.request('POST', '/image', PNG)
+            status, body = self.request('POST', '/img', PNG)
         self.assertEqual(status, 503)
         self.assertEqual(self.state.images, {})
 
     def test_expired_images_are_removed(self):
-        ident = secrets.token_hex(8) + '.png'
+        ident = secrets.token_hex(5) + '.png'
         self.state.images[ident] = (PNG, 0)
-        self.assertEqual(self.request('GET', '/image/' + ident, auth=False)[0], 404)
+        self.assertEqual(self.request('GET', '/img/' + ident, auth=False)[0], 404)
         self.state.cleanup()
         self.assertNotIn(ident, self.state.images)
 
 
 class MonitorTests(unittest.TestCase):
+    def test_tunnel_failure_stops_server_without_restarting(self):
+        cases = (
+            ('missing URL', None, Mock(poll=Mock(return_value=None)), [False]),
+            ('missing process', PUBLIC_URL, None, [False]),
+            ('exited process', PUBLIC_URL, Mock(poll=Mock(return_value=1)), [False]),
+            ('three failures', PUBLIC_URL, Mock(poll=Mock(return_value=None)),
+             [False, False, False]),
+            ('success resets failures', PUBLIC_URL, Mock(poll=Mock(return_value=None)),
+             [False, False, True, False, False, False]),
+        )
+        for name, url, process, results in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp, \
+                    patch.object(app, 'TOKEN_FILE', Path(tmp) / 'bearer.token'):
+                app.ensure_token()
+                state = app.State()
+                state.public_url = url
+                state.process = process
+                with patch.object(app, 'CHECK_EVERY', 0), \
+                        patch.object(app, 'say') as say, \
+                        patch.object(state.stop, 'wait'), \
+                        patch.object(state, 'start_tunnel') as start, \
+                        patch.object(state, 'public_healthy', side_effect=results) as check:
+                    state.monitor()
+                self.assertTrue(state.stop.is_set())
+                self.assertEqual(check.call_count, len(results))
+                start.assert_not_called()
+                say.assert_called_once_with(
+                    'Cloudflare tunnel is down; shutting down.',
+                    file=app.sys.stderr, notify=True)
+
     def test_no_restart_right_after_start(self):
         with tempfile.TemporaryDirectory() as tmp, \
                 patch.object(app, 'TOKEN_FILE', Path(tmp) / 'bearer.token'):
