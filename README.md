@@ -77,7 +77,7 @@ uvx twine check --strict dist/*
 ## Publishing
 
 The version lives in `__version__` in `cf_share_screenshot.py` (currently
-`0.1.0`). Build from a clean checkout using the commands above, ensuring `dist/`
+`0.1.1`). Build from a clean checkout using the commands above, ensuring `dist/`
 contains only the current release. Upload to TestPyPI:
 
 ```sh
@@ -87,7 +87,7 @@ uvx twine upload --repository testpypi dist/*
 Verify the TestPyPI release in an isolated environment:
 
 ```sh
-uvx --isolated --index https://test.pypi.org/simple/ --default-index https://pypi.org/simple/ cf-share-screenshot@0.1.0 --help
+uvx --isolated --index https://test.pypi.org/simple/ --default-index https://pypi.org/simple/ cf-share-screenshot@0.1.1 --help
 ```
 
 Then upload the same artifacts to PyPI:

@@ -27,7 +27,7 @@ from urllib.parse import urlsplit
 import urllib.error
 import urllib.request
 
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 
 PORT = 18765
 HOST = '127.0.0.1'
